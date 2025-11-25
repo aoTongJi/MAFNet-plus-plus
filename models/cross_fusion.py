@@ -1,62 +1,3 @@
-class cross_fusion(nn.Module):
-    def __init__(self, args):
-        super(cross_fusion, self).__init__()
-        self.args = args
-        cor_planes = 96 + args.corr_levels * (2*args.corr_radius + 1) * (8+1)
-        self.convc1 = nn.Conv2d(cor_planes, 64, 1, padding=0)
-        self.convc2 = nn.Conv2d(64, 64, 3, padding=1)
-
-        self.convc1_mono = nn.Conv2d(cor_planes, 64, 1, padding=0)
-        self.convc2_mono = nn.Conv2d(64, 64, 3, padding=1)
-
-        self.convd1 = nn.Conv2d(1, 64, 7, padding=3)
-        self.convd2 = nn.Conv2d(64, 64, 3, padding=1)
-
-        self.convd1_mono = nn.Conv2d(1, 64, 7, padding=3)
-        self.convd2_mono = nn.Conv2d(64, 64, 3, padding=1)
-
-        self.conv = nn.Conv2d(128, 64-1, 3, padding=1)
-        self.conv_mono = nn.Conv2d(128, 64-1, 3, padding=1)
-
-
-        # ShiftedWindowCrossAttention
-        self.cross_attn = ShiftedWindowCrossAttention(
-            stereo_dim=128,
-            mono_dim=128,
-            hidden_dim=256,
-            num_heads=8,
-            window_size=8,
-            shift_ratio=0.5
-        )
-
-    def forward(self, disp, corr, flaw_stereo, disp_mono, corr_mono, flaw_mono):
-        cor = F.relu(self.convc1(torch.cat([corr, flaw_stereo], dim=1)))
-        cor = F.relu(self.convc2(cor))
-        cor_mono = F.relu(self.convc1_mono(torch.cat([corr_mono, flaw_mono], dim=1)))
-        cor_mono = F.relu(self.convc2_mono(cor_mono))
-
-        disp_ = F.relu(self.convd1(disp))
-        disp_ = F.relu(self.convd2(disp_))
-
-        disp_mono_ = F.relu(self.convd1_mono(disp_mono))
-        disp_mono_ = F.relu(self.convd2_mono(disp_mono_))
-
-        cor_disp = torch.cat([cor, disp_], dim=1)
-        cor_disp_mono = torch.cat([cor_mono, disp_mono_], dim=1)
-
-        # cross attention fusion
-        stereo_enhanced, mono_enhanced = self.cross_attn(cor_disp, cor_disp_mono)
-
-        out = F.relu(self.conv(stereo_enhanced))
-        out_mono = F.relu(self.conv_mono(mono_enhanced))
-
-        return torch.cat([out, disp, out_mono, disp_mono], dim=1)
-
-
-
-
-
-
 class ShiftedWindowCrossAttention(nn.Module):
 
     
@@ -206,4 +147,5 @@ class ShiftedWindowCrossAttention(nn.Module):
         stereo_enhanced = stereo_enhanced + orig_stereo
         mono_enhanced = mono_enhanced + orig_mono
         
+
         return stereo_enhanced, mono_enhanced
